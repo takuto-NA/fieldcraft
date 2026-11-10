@@ -424,7 +424,7 @@ pub static CATALOGUE: &[Capability] = &[
         "Automatic Hex",
         "Unstructured all-hex mesh of any part: adaptive grid, boundary layers on every sharp edge, untangled and proven valid",
     ),
-    ready("mesh.hex.dominant", "Hex-Dominant", Mesh, "Automatic Hex", "Structured hex or a conforming mix of hexes, pyramids and tetrahedra"),
+    ready("mesh.hex.dominant", "Hex-Dominant", Mesh, "Automatic Hex", "Structured or octree hex with a conforming mixed mesh fallback"),
     soon("mesh.hex.polycube", "Polycube", Mesh, "Automatic Hex", "M6", "Polycube hex mesh of blocky parts"),
     soon("mesh.smooth", "Smooth", Mesh, "Improve", "M6", "Smooth node positions, keeping every element valid"),
     soon("mesh.untangle", "Untangle", Mesh, "Improve", "M6", "Repair inverted elements"),

@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 
 use super::hex::{Input, inputs, number, tag_faces};
 use super::mesh::optional_count;
+use super::sizes::Sizing;
 use crate::requirement::Requirement;
 use crate::{CommandKind, CommandSpec, EngineError, Result, Session};
 
@@ -23,7 +24,7 @@ pub const HEX_OCTREE: CommandSpec = CommandSpec {
 
 /// Smallest element size, relative to the bounding-box diagonal (the grid's cell count grows
 /// with the cube of its inverse).
-const MIN_RELATIVE_SIZE: f64 = 1e-3; // unit-factors: relative to the bounding-box diagonal
+pub(super) const MIN_RELATIVE_SIZE: f64 = 1e-3; // unit-factors: relative to the bounding-box diagonal
 /// Default element size, relative to the bounding-box diagonal.
 const DEFAULT_RELATIVE_SIZE: f64 = 1.0 / 25.0;
 /// Caps on the options.
@@ -49,19 +50,8 @@ fn hex_octree(s: &mut Session, p: &Value) -> Result<Value> {
     let mut meshes: Vec<(Input, OctreeHexMesh)> = Vec::with_capacity(bodies.len());
     let mut total = 0usize;
     for b in bodies {
-        if !(b.diagonal > 0.0 && b.diagonal.is_finite()) {
-            return Err(EngineError::Params(format!("body `{}` has no extent", b.name)));
-        }
-        let h = sizing.body_size(&b.name, size.unwrap_or(DEFAULT_RELATIVE_SIZE * b.diagonal));
-        if h < MIN_RELATIVE_SIZE * b.diagonal {
-            return Err(crate::units::below_diagonal("size", MIN_RELATIVE_SIZE, b.diagonal, &format!("body `{}`'s", b.name)));
-        }
-        let surface_options = super::mesh::surface_options(p, &b.mesh)?;
-        let surface = BoundarySurface::new(&b.mesh.positions, &b.mesh.triangles, &b.mesh.tri_face, &surface_options)
-            .map_err(|e| EngineError::context(format!("body `{}`", b.name), e))?;
         let left = OctreeOptions { max_elements: options.max_elements.saturating_sub(total).max(1), ..options.clone() };
-        let field = sizing.field(&b.name, h)?;
-        let mesh = octree_hex_mesh(&surface, &field, &left).map_err(|e| EngineError::of_body(&b.name, e))?;
+        let mesh = octree_body(p, &b, size, &sizing, &left)?;
         total += mesh.hexes.len();
         meshes.push((b, mesh));
     }
@@ -70,17 +60,7 @@ fn hex_octree(s: &mut Session, p: &Value) -> Result<Value> {
     let cleared = super::replace::clear(&mut model, meshes.iter().map(|(b, _)| b.name.as_str()));
     let mut report = Vec::with_capacity(meshes.len());
     for (b, m) in &meshes {
-        let (first_node, first_element) = super::fresh_labels(&model, m.nodes.len(), m.hexes.len())?;
-        for (i, xyz) in m.nodes.iter().enumerate() {
-            model.set_node(first_node + i as u32, *xyz)?;
-        }
-        let body_tag = model.geometry_tag(&GeometryRef::body(b.name.as_str())?)?;
-        for (i, hx) in m.hexes.iter().enumerate() {
-            let l = first_element + i as u32;
-            model.set_element(l, ElementKind::Hex8, hx.iter().map(|&i| first_node + i).collect())?;
-            model.tag_element(l, body_tag)?;
-        }
-        tag_faces(&mut model, std::slice::from_ref(b), |_| 0, &m.boundary, first_element)?;
+        add_octree(&mut model, b, m)?;
         let r = &m.report;
         report.push(json!({
             "body": b.name,
@@ -101,6 +81,35 @@ fn hex_octree(s: &mut Session, p: &Value) -> Result<Value> {
     let (nodes, elements) = (model.nodes().len(), model.elements().len());
     s.model = model;
     Ok(cleared.report(s, json!({"bodies": report, "nodes": nodes, "elements": elements})))
+}
+
+pub(super) fn octree_body(p: &Value, b: &Input, size: Option<f64>, sizing: &Sizing, options: &OctreeOptions) -> Result<OctreeHexMesh> {
+    if !(b.diagonal > 0.0 && b.diagonal.is_finite()) {
+        return Err(EngineError::Params(format!("body `{}` has no extent", b.name)));
+    }
+    let h = sizing.body_size(&b.name, size.unwrap_or(DEFAULT_RELATIVE_SIZE * b.diagonal));
+    if h < MIN_RELATIVE_SIZE * b.diagonal {
+        return Err(crate::units::below_diagonal("size", MIN_RELATIVE_SIZE, b.diagonal, &format!("body `{}`'s", b.name)));
+    }
+    let surface_options = super::mesh::surface_options(p, &b.mesh)?;
+    let surface = BoundarySurface::new(&b.mesh.positions, &b.mesh.triangles, &b.mesh.tri_face, &surface_options)
+        .map_err(|e| EngineError::context(format!("body `{}`", b.name), e))?;
+    let field = sizing.field(&b.name, h)?;
+    octree_hex_mesh(&surface, &field, options).map_err(|e| EngineError::of_body(&b.name, e))
+}
+
+pub(super) fn add_octree(model: &mut fieldcraft_model::Model, b: &Input, m: &OctreeHexMesh) -> Result<()> {
+    let (first_node, first_element) = super::fresh_labels(model, m.nodes.len(), m.hexes.len())?;
+    for (i, xyz) in m.nodes.iter().enumerate() {
+        model.set_node(first_node + i as u32, *xyz)?;
+    }
+    let body_tag = model.geometry_tag(&GeometryRef::body(b.name.as_str())?)?;
+    for (i, hx) in m.hexes.iter().enumerate() {
+        let l = first_element + i as u32;
+        model.set_element(l, ElementKind::Hex8, hx.iter().map(|&i| first_node + i).collect())?;
+        model.tag_element(l, body_tag)?;
+    }
+    tag_faces(model, std::slice::from_ref(b), |_| 0, &m.boundary, first_element)
 }
 
 /// A measure that may be infinite (no wall, no bounded face) as JSON: `null` when it is.
