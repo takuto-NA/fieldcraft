@@ -1594,6 +1594,21 @@ pub const HEX_DOMINANT: &[Field] = &[
     HEX_SIZE.hint("from the body"),
     TOLERANCE,
     int("max_tets", "Max source tetrahedra", 1, fieldcraft_mesh::dominant::MAX_SOURCE_TETS as i64).help("Cap on the intermediate tetrahedral mesh."),
+    group(
+        "requirements",
+        "Acceptance requirements",
+        &[
+            range("min_scaled_jacobian", "Minimum scaled Jacobian", D::None, 0.0, 1.0)
+                .help("Reject a candidate if any element is below this scaled Jacobian.")
+                .hint("0.2"),
+            num("max_edge_ratio", "Maximum edge ratio", D::None).help("Longest edge divided by shortest, per element.").hint("100"),
+            range("min_hex_volume_fraction", "Minimum hex volume fraction", D::None, 0.0, 1.0).help("Use 1 for all Hex8.").hint("0.5"),
+            choice("partition", "Section partition", &[("auto", "Automatic"), ("standard", "Standard"), ("alternate", "Alternate extrusion cuts")])
+                .help("An explicit partition searches only that structured route. Automatic also allows eligible fallback methods.")
+                .hint("auto"),
+        ],
+    )
+    .help("When supplied, mesh candidates must meet these requirements before the selected bodies' meshes are replaced."),
     WELD,
     WELD_DISTANCE,
     FEATURE_ANGLE,

@@ -52,8 +52,12 @@ pub(super) struct Input<'a> {
 /// with one face, along which a closed face (a whole cylinder or torus) meets itself, bound it
 /// on both sides as the meshers need.
 pub(super) fn hex_surface(options: &SurfaceOptions, b: &Input) -> fieldcraft_mesh::Result<BoundarySurface> {
-    let surface = BoundarySurface::new(&b.mesh.positions, &b.mesh.triangles, &b.mesh.tri_face, options)?;
-    surface.with_seams(&b.mesh.seams(), options.weld_distance.max(options.weld_tolerance * b.diagonal))
+    hex_surface_mesh(options, &b.mesh, b.diagonal)
+}
+
+fn hex_surface_mesh(options: &SurfaceOptions, mesh: &SurfaceMesh, diagonal: f64) -> fieldcraft_mesh::Result<BoundarySurface> {
+    let surface = BoundarySurface::new(&mesh.positions, &mesh.triangles, &mesh.tri_face, options)?;
+    surface.with_seams(&mesh.seams(), options.weld_distance.max(options.weld_tolerance * diagonal))
 }
 
 fn analytic(s: FaceSurface) -> Surface {
@@ -359,6 +363,17 @@ pub(super) fn hex_body_with_limit(
     sizing: &Sizing,
     max_elements: usize,
 ) -> Result<HexMesh> {
+    let options = HexOptions { method, quadratic, max_elements, ..HexOptions::default() };
+    build_body_hex(p, b, size, sizing, options, None)
+}
+
+/// An alternate outline for planning cuts only. The original tessellation stays in the mesh gate.
+pub(super) fn hex_body_with_section_guide(p: &Value, b: &Input, size: f64, sizing: &Sizing, max_elements: usize, shape: &Shape) -> Result<HexMesh> {
+    let options = HexOptions { max_elements, ..HexOptions::default() };
+    build_body_hex(p, b, Some(size), sizing, options, Some(shape))
+}
+
+fn build_body_hex(p: &Value, b: &Input, size: Option<f64>, sizing: &Sizing, mut options: HexOptions, guide: Option<&Shape>) -> Result<HexMesh> {
     if !(b.diagonal > 0.0 && b.diagonal.is_finite()) {
         return Err(EngineError::Params(format!("body `{}` has no extent", b.name)));
     }
@@ -369,9 +384,19 @@ pub(super) fn hex_body_with_limit(
     let surface_options = super::mesh::surface_options(p, &b.mesh)?;
     let surface = hex_surface(&surface_options, b).map_err(|e| EngineError::context(format!("body `{}`", b.name), e))?;
     let chord = if b.surfaces.is_empty() { 0.0 } else { number(p, "tolerance")?.unwrap_or(DEFAULT_RELATIVE_TOLERANCE * b.diagonal) };
-    let options = HexOptions { method, quadratic, chordal_tolerance: chord, max_elements, seeds: b.seeds.clone(), ..HexOptions::default() };
+    options.chordal_tolerance = chord;
+    options.seeds.clone_from(&b.seeds);
     let field = sizing.field(&b.name, h)?;
-    hex_mesh(&surface, &b.surfaces, &field, &options).map_err(|e| EngineError::of_body(&b.name, e))
+    let mesh = if let Some(shape) = guide {
+        // The cut planner alone uses the second sampling.
+        let guide_tolerance = 1.75 * chord;
+        let outline = shape.tessellate_pieces(guide_tolerance)?.0;
+        let guide = hex_surface_mesh(&surface_options, &outline, b.diagonal).map_err(|e| EngineError::of_body(&b.name, e))?;
+        fieldcraft_mesh::hex::hex_mesh_with_section_guide(&surface, &b.surfaces, &field, &options, &guide, guide_tolerance)
+    } else {
+        hex_mesh(&surface, &b.surfaces, &field, &options)
+    };
+    mesh.map_err(|e| EngineError::of_body(&b.name, e))
 }
 
 /// Add a mesh of several cells (`inputs[c]` is cell `c`) after the model's largest labels, its

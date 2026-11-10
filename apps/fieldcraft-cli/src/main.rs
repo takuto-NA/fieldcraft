@@ -1,5 +1,5 @@
 //! fieldcraft-cli commands
-//! fieldcraft-cli run <script.json>
+//! fieldcraft-cli run <script.json> [--replies]
 //! fieldcraft-cli snapshot <script.json> --out shot.png [--view V | --camera JSON] [--size WxH] [--section x|y|z[=V]] [--field F]
 //! fieldcraft-cli features
 //! fieldcraft-cli mcp [--connect ADDR | --headless] [--automation-read-root DIR] [--automation-write-root DIR]
@@ -23,8 +23,9 @@ const USAGE: &str = "\
 usage:
   fieldcraft-cli commands              list every command with its parameters
   fieldcraft-cli commands --json       the same as JSON, each command's parameters as JSON Schema
-  fieldcraft-cli run <script.json>     run a script (a JSON array of {\"command\", \"params\"})
-                                       and print the model summary
+  fieldcraft-cli run <script.json> [--replies]
+                                       run a script (a JSON array of {\"command\", \"params\"})
+                                       and print the model summary, with command replies if requested
   fieldcraft-cli snapshot <script.json> --out FILE.png [--view V | --camera JSON]
                       [--size WxH] [--section x|y|z[=VALUE]] [--field FIELD]
                                        run a script and draw the model to a PNG with no
@@ -88,7 +89,11 @@ fn main() -> ExitCode {
         Some("crashes") => crashes::run(args.get(1..).unwrap_or(&[])),
         Some("update") => update::run(args.get(1..).unwrap_or(&[])),
         Some("snapshot") => snapshot::run(args.get(1..).unwrap_or(&[])),
-        Some("run") => args.get(1).ok_or_else(|| format!("run needs a script\n\n{USAGE}")).and_then(|p| run(p)),
+        Some("run") => match args.get(1..).unwrap_or(&[]) {
+            [path] => run(path, false),
+            [path, flag] if flag == "--replies" => run(path, true),
+            _ => Err(format!("run takes SCRIPT.json [--replies]\n\n{USAGE}")),
+        },
         Some("-V" | "--version") => {
             println!("fieldcraft-cli {}", env!("CARGO_PKG_VERSION"));
             Ok(())
@@ -165,6 +170,10 @@ pub fn picture_report(r: &fieldcraft_gpu::Renderer, shown: &fieldcraft_engine::v
 
 /// The session after running the script at `path`.
 fn session_of(path: &str) -> Result<Session, String> {
+    script_session(path).map(|(session, _)| session)
+}
+
+fn script_session(path: &str) -> Result<(Session, Vec<serde_json::Value>), String> {
     let size = std::fs::metadata(path).map_err(|e| format!("{path}: {e}"))?.len();
     if size > MAX_SCRIPT_BYTES {
         return Err(format!("{path}: larger than {} MB", MAX_SCRIPT_BYTES / (1024 * 1024)));
@@ -178,14 +187,14 @@ fn session_of(path: &str) -> Result<Session, String> {
     if let Some(report) = session.take_solver_diagnostic() {
         eprintln!("fieldcraft-cli: solver diagnostic {}", report.display());
     }
-    run.map_err(|e| e.to_string())?;
-    Ok(session)
+    Ok((session, run.map_err(|e| e.to_string())?))
 }
 
-fn run(path: &str) -> Result<(), String> {
-    let mut session = session_of(path)?;
+fn run(path: &str, include_replies: bool) -> Result<(), String> {
+    let (mut session, replies) = script_session(path)?;
     let info = session.execute("model.info", &json!({})).map_err(|e| e.to_string())?;
-    println!("{}", serde_json::to_string_pretty(&info).map_err(|e| e.to_string())?);
+    let output = if include_replies { json!({"replies":replies,"model":info}) } else { info };
+    println!("{}", serde_json::to_string_pretty(&output).map_err(|e| e.to_string())?);
     Ok(())
 }
 

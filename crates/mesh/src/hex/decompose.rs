@@ -1020,13 +1020,14 @@ fn o_grid(loops: &[Poly], s: &Settings, budget: &mut usize) -> Vec<Vec<Q>> {
 }
 
 /// The cuts that decompose one region (its loops), and the pieces it ends in.
-fn decompose_region(loops: &[Poly], s: &Settings) -> (Vec<Vec<Q>>, Vec<Vec<Poly>>) {
+fn decompose_region(loops: &[Poly], s: &Settings) -> Result<(Vec<Vec<Q>>, Vec<Vec<Poly>>)> {
     let mut cuts: Vec<Vec<Q>> = Vec::new();
     let mut leaves: Vec<Vec<Poly>> = Vec::new();
     let mut work = vec![loops.to_vec()];
     let mut steps = 0;
     let mut remaining = REGION_BUDGET;
     while let Some(piece) = work.pop() {
+        fieldcraft_model::progress::check()?;
         steps += 1;
         if steps > MAX_STEPS || remaining == 0 || piece.iter().map(Poly::len).sum::<usize>() > MAX_PIECE_POINTS {
             leaves.push(piece);
@@ -1059,7 +1060,7 @@ fn decompose_region(loops: &[Poly], s: &Settings) -> (Vec<Vec<Q>>, Vec<Vec<Poly>
             _ => leaves.push(piece),
         }
     }
-    (cuts, leaves)
+    Ok((cuts, leaves))
 }
 
 /// The score of the free all-quad mesh of a region on the target size, as a piece's (0 when it
@@ -1122,7 +1123,7 @@ pub(crate) fn cuts(arr: &Arrangement, used: &[bool], locked: &[bool], s: &Settin
         if seeded && score(&loops, s).is_some() {
             continue;
         }
-        let (cuts, leaves) = decompose_region(&loops, s);
+        let (cuts, leaves) = decompose_region(&loops, s)?;
         // A region whose pieces cannot be given counts together would fail the whole
         // cross-section: it stays as it is.
         if cuts.is_empty() || !assignable(&loops, &cuts, s) {
@@ -1657,7 +1658,7 @@ mod tests {
         let field = UniformSize(2.5);
         let opts = QuadOptions::default();
         let s = Settings { field: &field, tol: 1e-9, opts: &opts };
-        let (cuts, _) = decompose_region(&disk, &s);
+        let (cuts, _) = decompose_region(&disk, &s).unwrap();
         assert!(cuts.is_empty(), "{cuts:?}");
     }
 

@@ -16,6 +16,7 @@ pub const MAX_STEPS: usize = 10_000;
 const MESHERS: &[(&str, &str, &str)] = &[
     ("tet", "mesh.tet.generate", "constrained Delaunay tets of every body of the open design, one {body}, or an imported surface {surface}"),
     ("hex", "mesh.hex.generate", "all-hex mesh of a body"),
+    ("hex_dominant", "mesh.hex.dominant", "mesh with acceptance requirements. Inspect outcome and retry with next_attempt when offered"),
     ("hex_sweep", "mesh.hex.sweep", "swept all-hex mesh"),
     ("hex_mapped", "mesh.hex.mapped", "mapped all-hex mesh"),
     ("hex_blocks", "mesh.hex.blocks", "one conforming all-hex mesh of a design split into six-sided blocks {bodies, size, order}"),
@@ -466,6 +467,14 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> Value {
         _ => dispatch(b, name, a),
     };
     match r {
+        Ok(v)
+            if (name == "mesh" && a.get("method").and_then(Value::as_str) == Some("hex_dominant"))
+                || (name == "execute" && a.get("command").and_then(Value::as_str) == Some("mesh.hex.dominant")) =>
+        {
+            let mut result = text_result(&v, false);
+            result["structuredContent"] = v;
+            result
+        }
         Ok(v) => text_result(&v, false),
         Err(e) => text_result(&Value::String(e), true),
     }
@@ -526,9 +535,14 @@ fn dispatch(b: &mut dyn Backend, name: &str, a: &Map<String, Value>) -> Result<V
         "mesh" => {
             let method = str_arg(a, "method").ok_or("`method` is required")?;
             let (_, command, _) = available(MESHERS, |m| m.1).find(|m| m.0 == method).ok_or_else(|| format!("unknown mesh method `{method}`"))?;
-            let mesh = b.execute(command, object_arg(a, "params"))?;
+            let mut params = object_arg(a, "params");
+            if method == "hex_dominant" && params.get("requirements").is_none() {
+                params["requirements"] = json!({});
+            }
+            let mesh = b.execute(command, params)?;
             let model = b.execute("model.info", json!({}))?;
-            let quality = b.execute("mesh.quality", json!({})).unwrap_or_else(|e| json!({"error": e}));
+            let quality =
+                if mesh["outcome"] == "unmet" { Value::Null } else { b.execute("mesh.quality", json!({})).unwrap_or_else(|e| json!({"error": e})) };
             Ok(json!({"command": command, "mesh": mesh, "model": model, "quality": quality}))
         }
         "solve" => {
