@@ -26,10 +26,10 @@ pub const HEX_GENERATE: CommandSpec = CommandSpec {
 /// Bodies at most a command meshes.
 const MAX_BODIES: usize = 1000;
 /// Smallest element size and chordal tolerance, relative to the bounding-box diagonal.
-const MIN_RELATIVE_SIZE: f64 = 1e-4;
+pub(super) const MIN_RELATIVE_SIZE: f64 = 1e-4;
 const MIN_RELATIVE_TOLERANCE: f64 = 1e-5;
 /// Default element size and chordal tolerance, relative to the bounding-box diagonal.
-const DEFAULT_RELATIVE_SIZE: f64 = 1.0 / 25.0;
+pub(super) const DEFAULT_RELATIVE_SIZE: f64 = 1.0 / 25.0;
 pub(super) const DEFAULT_RELATIVE_TOLERANCE: f64 = 1e-3; // unit-factors: relative to the bounding-box diagonal
 
 /// One body to mesh (also the input of `mesh.hex.octree`).
@@ -347,6 +347,18 @@ fn generate(s: &mut Session, p: &Value, default: HexMethod, allowed: &[HexMethod
 /// Mesh one body with `method` (hex20 when `quadratic`) at `size` (default: from its extent) and
 /// the size controls of `sizing`; the model is not touched. Errors name the body.
 pub(super) fn hex_body(p: &Value, b: &Input, method: HexMethod, quadratic: bool, size: Option<f64>, sizing: &Sizing) -> Result<HexMesh> {
+    hex_body_with_limit(p, b, method, quadratic, size, sizing, fieldcraft_model::MAX_ELEMENTS / 8)
+}
+
+pub(super) fn hex_body_with_limit(
+    p: &Value,
+    b: &Input,
+    method: HexMethod,
+    quadratic: bool,
+    size: Option<f64>,
+    sizing: &Sizing,
+    max_elements: usize,
+) -> Result<HexMesh> {
     if !(b.diagonal > 0.0 && b.diagonal.is_finite()) {
         return Err(EngineError::Params(format!("body `{}` has no extent", b.name)));
     }
@@ -357,14 +369,7 @@ pub(super) fn hex_body(p: &Value, b: &Input, method: HexMethod, quadratic: bool,
     let surface_options = super::mesh::surface_options(p, &b.mesh)?;
     let surface = hex_surface(&surface_options, b).map_err(|e| EngineError::context(format!("body `{}`", b.name), e))?;
     let chord = if b.surfaces.is_empty() { 0.0 } else { number(p, "tolerance")?.unwrap_or(DEFAULT_RELATIVE_TOLERANCE * b.diagonal) };
-    let options = HexOptions {
-        method,
-        quadratic,
-        chordal_tolerance: chord,
-        max_elements: fieldcraft_model::MAX_ELEMENTS / 8,
-        seeds: b.seeds.clone(),
-        ..HexOptions::default()
-    };
+    let options = HexOptions { method, quadratic, chordal_tolerance: chord, max_elements, seeds: b.seeds.clone(), ..HexOptions::default() };
     let field = sizing.field(&b.name, h)?;
     hex_mesh(&surface, &b.surfaces, &field, &options).map_err(|e| EngineError::of_body(&b.name, e))
 }

@@ -288,7 +288,7 @@ pub(super) struct BodyTets {
     pub(super) mesh: QualityMesh,
     steiner: usize,
     cavities: usize,
-    surface_volume: f64,
+    pub(super) surface_volume: f64,
 }
 
 impl BodyTets {
@@ -752,8 +752,10 @@ fn report_json(r: &QualityReport) -> serde_json::Map<String, Value> {
 pub const MARKED_SET: &str = "quality_marked";
 
 /// The default limits of `mesh.quality.mark`.
+pub(super) const LOW_SCALED_JACOBIAN: f64 = 0.2;
+
 const MARK_LIMITS: [(quality::Metric, f64); 6] = [
-    (quality::Metric::ScaledJacobian, 0.2),
+    (quality::Metric::ScaledJacobian, LOW_SCALED_JACOBIAN),
     (quality::Metric::MinDihedral, 10.0),
     (quality::Metric::MaxDihedral, 165.0),
     (quality::Metric::AspectRatio, 10.0),
