@@ -745,7 +745,8 @@ fn apply(s: &mut Session, p: &Value) -> Result<Value> {
 
 /// After a remesh (`id`), apply again every field marked `reapply`; its reply lists them.
 pub(crate) fn after_remesh(s: &mut Session, id: &str, mut reply: Value) -> Result<Value> {
-    if !REMESH.contains(&id) {
+    // The checked hex command publishes the candidate it inspected, or leaves the model intact.
+    if !REMESH.contains(&id) || (id == "mesh.hex.dominant" && reply.get("requirements").is_some()) {
         return Ok(reply);
     }
     let fields: Vec<String> = s.model.relaxations().iter().filter(|(_, f)| f.reapply).map(|(n, _)| n.clone()).collect();

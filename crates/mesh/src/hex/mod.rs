@@ -283,6 +283,33 @@ pub(crate) const RELATIVE_TOLERANCE: f64 = 1e-6; // unit-factors: relative to th
 /// own vertices lie on it, else to its triangles); `field` sets the element size. A body no
 /// structured method fits is [`Error::Unsupported`] with the reasons.
 pub fn hex_mesh(surface: &BoundarySurface, faces: &[Option<Surface>], field: &dyn SizeField, opts: &HexOptions) -> Result<HexMesh> {
+    hex_mesh_impl(surface, faces, field, opts, None)
+}
+
+/// An alternate tessellation of the same body used only to propose extrusion cuts. The mesh
+/// still uses `surface` and its tolerance for the fit, boundary tags and validation.
+pub fn hex_mesh_with_section_guide(
+    surface: &BoundarySurface,
+    faces: &[Option<Surface>],
+    field: &dyn SizeField,
+    opts: &HexOptions,
+    guide: &BoundarySurface,
+    guide_tolerance: f64,
+) -> Result<HexMesh> {
+    if !(guide_tolerance.is_finite() && guide_tolerance >= 0.0) {
+        return Err(Error::Invalid("the section guide tolerance must be non-negative and finite".into()));
+    }
+    let options = HexOptions { method: HexMethod::Extrude, ..opts.clone() };
+    hex_mesh_impl(surface, faces, field, &options, Some((guide, guide_tolerance)))
+}
+
+fn hex_mesh_impl(
+    surface: &BoundarySurface,
+    faces: &[Option<Surface>],
+    field: &dyn SizeField,
+    opts: &HexOptions,
+    guide: Option<(&BoundarySurface, f64)>,
+) -> Result<HexMesh> {
     if !(opts.chordal_tolerance >= 0.0 && opts.chordal_tolerance.is_finite()) {
         return Err(Error::invalid(crate::message![
             "the chordal tolerance must be a non-negative number, got ",
@@ -299,6 +326,12 @@ pub fn hex_mesh(surface: &BoundarySurface, faces: &[Option<Surface>], field: &dy
     let brep = Brep::new(surface, faces)?;
     let tree = TriangleTree::new(surface)?;
     let ctx = Ctx::new(&brep, &tree, field, opts)?;
+    let guide_data = guide
+        .map(|(surface, chordal_tolerance)| -> Result<_> {
+            Ok((Brep::new(surface, faces)?, TriangleTree::new(surface)?, HexOptions { chordal_tolerance, ..opts.clone() }))
+        })
+        .transpose()?;
+    let guide_ctx = guide_data.as_ref().map(|(brep, tree, options)| Ctx::with_tolerance(brep, tree, field, options, ctx.tol)).transpose()?;
     let methods: &[HexMethod] = match opts.method {
         HexMethod::Auto => &[HexMethod::Extrude, HexMethod::Sweep, HexMethod::Revolve, HexMethod::Mapped],
         HexMethod::Swept => &[HexMethod::Extrude, HexMethod::Sweep, HexMethod::Revolve],
@@ -323,8 +356,9 @@ pub fn hex_mesh(surface: &BoundarySurface, faces: &[Option<Surface>], field: &dy
                 for setup in setups {
                     fieldcraft_model::progress::check()?;
                     // The cross-section is laid out once per frame; refinement retries reuse it.
-                    let prepared = match layered::prepare(std::slice::from_ref(&ctx), setup) {
+                    let prepared = match layered::prepare_with_guide(std::slice::from_ref(&ctx), setup, guide_ctx.as_ref()) {
                         Ok(p) => p,
+                        Err(e @ Error::Model(fieldcraft_model::Error::Cancelled)) => return Err(e),
                         Err(e) if e.kind() == Some(crate::Kind::Limit) => return Err(e),
                         Err(e) => {
                             last = Some(e);
@@ -333,6 +367,7 @@ pub fn hex_mesh(surface: &BoundarySurface, faces: &[Option<Surface>], field: &dy
                     };
                     match with_refinement(&ctx, method, |refine| layered::mesh(std::slice::from_ref(&ctx), &prepared, refine).map(|m| m.0)) {
                         Ok(mesh) => return Ok(mesh),
+                        Err(e @ Error::Model(fieldcraft_model::Error::Cancelled)) => return Err(e),
                         Err(e) if e.kind() == Some(crate::Kind::Limit) => return Err(e),
                         Err(e) => last = Some(e),
                     }
@@ -340,6 +375,7 @@ pub fn hex_mesh(surface: &BoundarySurface, faces: &[Option<Surface>], field: &dy
             }
             HexMethod::Sweep => match with_refinement(&ctx, method, |refine| sweep::mesh(&ctx, refine)) {
                 Ok(mesh) => return Ok(mesh),
+                Err(e @ Error::Model(fieldcraft_model::Error::Cancelled)) => return Err(e),
                 Err(e) if e.kind() == Some(crate::Kind::Limit) => return Err(e),
                 Err(e) => last = Some(e),
             },

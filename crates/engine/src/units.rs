@@ -625,6 +625,7 @@ const MESHED: Numbers = &[
     ("/bodies/*/boundary_volume", Dim::Of(Quantity::Volume)),
     ("/bodies/*/surface_volume", Dim::Of(Quantity::Volume)),
     ("/bodies/*/quality/snap_gap", Dim::Length),
+    ("/bodies/*/rejected/*/violations/*/at", Dim::Length),
     ("/bodies/*/grid/root_size", Dim::Length),
     ("/bodies/*/grid/thinnest_wall", Dim::Length),
     ("/bodies/*/grid/narrowest_patch", Dim::Length),

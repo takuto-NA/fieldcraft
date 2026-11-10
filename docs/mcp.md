@@ -257,6 +257,44 @@ and imprints need, the copies a pattern or mirror made, and the features not map
 and reports `all_hex`, `conforming`, the smallest scaled Jacobian and what still needs the
 projection mesher (`pending`).
 
+## Completing a hex-dominant mesh
+
+Use the `mesh` tool with `method: "hex_dominant"` and the parameters below to test the standard
+partition of `Lid`. You can also pass the same parameters to `execute` with `mesh.hex.dominant`.
+
+```json
+{
+  "body": "Lid",
+  "requirements": {
+    "partition": "standard",
+    "min_hex_volume_fraction": 1,
+    "min_scaled_jacobian": 0.2,
+    "max_edge_ratio": 100
+  }
+}
+```
+
+- Read `structuredContent.mesh.outcome` from `mesh`, or `structuredContent.outcome` from `execute`.
+  `committed` means every requested body met the requirements.
+  `unmet` means the engine completed its search and kept the existing model. A transport error is
+  separate from either outcome. With `fieldcraft-cli run SCRIPT.json --replies`, the same command
+  replies are available in `replies`, alongside the final `model` summary.
+- Each body's `rejected` list gives the method, optional section partition and reason code.
+  Quality violations include the actual value and limit. When a violation names an element,
+  `candidate_element` is its zero-based index in that candidate and `at` is its centroid in the
+  display length units.
+- When a body offers `next_attempt`, merge its `params_patch` into the original request (merge
+  keys inside `requirements` as well), then run the named command. The patch preserves the target,
+  size, CAD tolerance and quality limits. The alternate extrusion partition uses a second outline
+  to propose cuts, and fits and validates the result against the original surface. It is offered
+  for CAD bodies without edge seeds.
+- With `partition: "auto"` (the default when `requirements` is supplied), the same bounded
+  search tries the alternate section if the standard one fails, then can try octree and mixed
+  meshes. An explicit partition runs the structured route alone. A fraction of `1` requires
+  every element to be Hex8 and skips the mixed route. An empty `requirements` object uses 0.2,
+  100 and 0.5 as the defaults. The `mesh` tool supplies this empty object if omitted.
+  The checked path publishes the inspected candidate with automatic relaxation fields skipped.
+
 ## Relaxing a few bad elements
 
 When `mesh.quality` shows a handful of spikes in an otherwise good mesh:

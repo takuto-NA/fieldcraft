@@ -412,6 +412,42 @@ impl Prepared {
 /// bodies meet on a wall they get the same curves, and each region of each level interval is
 /// filled by the body it lies in.
 pub(crate) fn prepare(ctxs: &[Ctx], setup: Setup) -> Result<Prepared> {
+    prepare_with_guide(ctxs, setup, None)
+}
+
+/// Plan cuts on an alternate tessellation in the same frame, then imprint only the cuts on
+/// the original section. Occupancy, analytic projection and validation use the original body.
+pub(crate) fn prepare_with_guide(ctxs: &[Ctx], frame_setup: Setup, guide: Option<&Ctx>) -> Result<Prepared> {
+    let (mut section, mut imprint) = uncut(ctxs, frame_setup)?;
+    let cuts = if let Some(guide) = guide {
+        let guides = std::slice::from_ref(guide);
+        let guide_setup = setup(guides, &section.setup.frame)?;
+        let (layout, _) = uncut(guides, guide_setup)?;
+        let cuts = section_cuts(guides, &layout)?;
+        if cuts.is_empty() {
+            return Err(Error::Unsupported("the alternate section proposed no cuts".into()));
+        }
+        cuts
+    } else {
+        section_cuts(ctxs, &section)?
+    };
+    if !cuts.is_empty() {
+        let ctx = ctxs.first().ok_or_else(|| Error::Failed("no body to sweep".into()))?;
+        imprint.polylines.extend(cuts.into_iter().map(|line| (line, decompose::CUT)));
+        section.arr = arrangement::build(&imprint.vertices, &imprint.polylines, ctx.tol, imprint.coincide)?;
+        let mut inside = Occupants::new(ctxs, ctx.tol);
+        (section.filled, section.used) = occupancy(&section.arr, &section.setup.frame, &section.intervals, &mut inside)?;
+    }
+    Ok(section)
+}
+
+struct Imprint {
+    vertices: Vec<Q>,
+    polylines: Vec<(Vec<Q>, usize)>,
+    coincide: f64,
+}
+
+fn uncut(ctxs: &[Ctx], setup: Setup) -> Result<(Prepared, Imprint)> {
     let ctx = ctxs.first().ok_or_else(|| Error::Failed("no body to sweep".into()))?;
     let tol = ctx.tol;
     let frame = &setup.frame;
@@ -469,21 +505,19 @@ pub(crate) fn prepare(ctxs: &[Ctx], setup: Setup) -> Result<Prepared> {
     let ends: Vec<f64> = if frame.periodic() { rest.iter().copied().chain(std::iter::once(first_level + TAU)).collect() } else { rest.to_vec() };
     let intervals: Vec<(f64, f64)> = levels.iter().copied().zip(ends).collect();
     let mut inside = Occupants::new(ctxs, tol);
-    let mut arr = arrangement::build(&vertices, &polylines, tol, coincide)?;
-    let (mut filled, mut used) = occupancy(&arr, frame, &intervals, &mut inside)?;
-    // Cut the filled regions into blocks the structured schemes fit, and lay the arrangement out
-    // again with the cuts.
-    let h_ref = levels.first().copied().unwrap_or(0.0);
+    let arr = arrangement::build(&vertices, &polylines, tol, coincide)?;
+    let (filled, used) = occupancy(&arr, frame, &intervals, &mut inside)?;
+    Ok((Prepared { setup, arr, intervals, filled, used, offsets }, Imprint { vertices, polylines, coincide }))
+}
+
+fn section_cuts(ctxs: &[Ctx], section: &Prepared) -> Result<Vec<Vec<Q>>> {
+    let ctx = ctxs.first().ok_or_else(|| Error::Failed("no body to sweep".into()))?;
+    let frame = &section.setup.frame;
+    let h_ref = section.setup.levels.first().copied().unwrap_or(0.0);
     let plane = PlaneField { field: ctx.field, frame: *frame, h: h_ref };
-    let settings = decompose::Settings { field: &plane, tol, opts: &ctx.opts.quad };
-    let locked = seeded_curves(ctxs, frame, h_ref, &intervals, setup.h_tol, &arr);
-    let cut_lines = decompose::cuts(&arr, &used, &locked, &settings)?;
-    if !cut_lines.is_empty() {
-        polylines.extend(cut_lines.into_iter().map(|c| (c, decompose::CUT)));
-        arr = arrangement::build(&vertices, &polylines, tol, coincide)?;
-        (filled, used) = occupancy(&arr, frame, &intervals, &mut inside)?;
-    }
-    Ok(Prepared { setup, arr, intervals, filled, used, offsets })
+    let settings = decompose::Settings { field: &plane, tol: ctx.tol, opts: &ctx.opts.quad };
+    let locked = seeded_curves(ctxs, frame, h_ref, &section.intervals, section.setup.h_tol, &section.arr);
+    decompose::cuts(&section.arr, &section.used, &locked, &settings)
 }
 
 /// Mesh the prepared cross-section, with its curves `2^refine` times finer than the size asks;
