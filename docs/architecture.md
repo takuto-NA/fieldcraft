@@ -131,9 +131,14 @@ Three checks keep the pin current:
    valid by the certified Bernstein Jacobian check (Johnen et al. 2013; Marschner et al. 2020)
    before the boundary quads are tagged with their B-rep faces. Where a stage fails the grid is
    refined there and the mesh rebuilt. The dual schemes of Livesu et al. 2021 (fewer elements,
-   concave transitions) are the next upgrade of the transitions. Then hex-dominant by tet
-   recombination (Pellerin et al. 2018), then polycube (DualCube labelling) for blocky parts;
-   frame-field/integer-grid-map methods stay research.
+   concave transitions) are the next upgrade of the transitions. `mesh.hex.dominant` uses a
+   structured hex8 mesh where it fits and otherwise recombines a linear tet mesh. Its first
+   version looks for six-tet fans about a body diagonal (Pellerin et al. 2018, compatibility
+   and boundary tests). It replaces a fan only when all six quads are planar and either
+   retain a single boundary face tag or match a hex or pyramid on the other side. The
+   remainder stays tet4, and the command reports the hex volume fraction per body.
+   Polycube (DualCube labelling) for blocky parts is planned. Frame-field and integer-grid-map
+   methods stay research.
 5. **Structured hex and face meshing.** Faces get all-quad meshes on shared, prescribed edge
    nodes (`fieldcraft-mesh::quad`): transfinite interpolation for four-sided faces (Gordon and
    Hall 1973), and for free faces a half-resolution constrained Delaunay triangulation,

@@ -66,6 +66,7 @@ const REMESH: &[&str] = &[
     "mesh.hex.blocks",
     "mesh.plan.apply",
     "mesh.hex.octree",
+    "mesh.hex.dominant",
     "mesh.cells",
     "mesh.block",
 ];

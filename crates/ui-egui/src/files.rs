@@ -185,6 +185,7 @@ pub const BACKGROUND: &[&str] = &[
     "mesh.hex.mapped",
     "mesh.hex.blocks",
     "mesh.hex.octree",
+    "mesh.hex.dominant",
     "mesh.hex.project",
     "mesh.node.relax",
     "mesh.plan.apply",
