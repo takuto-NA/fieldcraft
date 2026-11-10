@@ -10,6 +10,7 @@
 pub mod block;
 pub mod cdt;
 pub mod delaunay;
+pub mod dominant;
 pub mod hex;
 pub mod join;
 pub mod message;
