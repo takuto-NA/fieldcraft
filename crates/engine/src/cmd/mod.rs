@@ -30,6 +30,7 @@ pub use nodes::merge_preview as node_merge_preview;
 pub use plan::untagged_faces;
 pub use relax::{Preview as RelaxPreview, preview as relax_preview, sphere as relax_sphere};
 pub use solve::{FluidEstimate, fluid_estimate};
+mod dominant;
 mod fluid_measure;
 mod library;
 mod mirror;
@@ -122,6 +123,7 @@ pub static ALL: &[CommandSpec] = &[
     mesh::PLANAR,
     mesh::TET_GENERATE,
     octree::HEX_OCTREE,
+    dominant::HEX_DOMINANT,
     block::BLOCK,
     hex::HEX_GENERATE,
     hex::HEX_SWEEP,

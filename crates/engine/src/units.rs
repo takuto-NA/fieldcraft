@@ -702,6 +702,7 @@ const GEOMETRY_REPLIES: &[(&str, Numbers)] = &[
     ("mesh.hex.mapped", MESHED),
     ("mesh.hex.blocks", MESHED),
     ("mesh.hex.octree", MESHED),
+    ("mesh.hex.dominant", MESHED),
     ("mesh.hex.project", MESHED),
     ("mesh.cells", MESHED),
     ("mesh.hex.extrude", &[("/volume", Dim::Of(Quantity::Volume)), ("/max_target_gap", Dim::Length)]),

@@ -1588,6 +1588,17 @@ pub const SYMMETRY: &[Field] = &[
     references("bodies", "Bodies", C::Body).help("The bodies cut by the symmetry plane; every body when empty.").hint("every body"),
 ];
 
+pub const HEX_DOMINANT: &[Field] = &[
+    BODY,
+    SURFACE,
+    HEX_SIZE.hint("from the body"),
+    TOLERANCE,
+    int("max_tets", "Max source tetrahedra", 1, fieldcraft_mesh::dominant::MAX_SOURCE_TETS as i64).help("Cap on the intermediate tetrahedral mesh."),
+    WELD,
+    WELD_DISTANCE,
+    FEATURE_ANGLE,
+];
+
 pub const HEX_OCTREE: &[Field] = &[
     BODY,
     SURFACE,

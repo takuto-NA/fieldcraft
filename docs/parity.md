@@ -39,7 +39,8 @@ products are run, no documentation text is copied). Status: **done**, **started*
 | Mesh | Automatic decomposition into sweepable and mappable regions | M5 | yes | planned |
 | Mesh | Conforming interfaces, tet–hex transition with pyramids | M5 | yes | planned |
 | Mesh | Octree/grid-dual all-hex for any part | M6 | yes | planned |
-| Mesh | Hex-dominant by recombination; polycube | M6 | yes | planned |
+| Mesh | Hex-dominant by recombination | M6 | yes | first version: `mesh.hex.dominant`, planar six-tet fans, conforming pyramid transitions |
+| Mesh | Polycube | M6 | yes | planned |
 | Mesh | Smoothing, untangling, boundary padding, layers through thin walls | M6 | yes | planned |
 | Mesh | Mesh editing (move, merge, split, collapse, remesh region), imported orphan meshes | M6 | yes | started (node/element add/remove, merge coincident nodes, duplicate and crack check, renumber) |
 | Model | Sets and surfaces bound to geometry names | M3 | yes | done |
