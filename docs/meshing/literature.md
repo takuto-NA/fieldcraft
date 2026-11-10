@@ -851,6 +851,10 @@ narrowest patch; a part beyond the levels or cells allowed fails at once with th
 - **Method.** Enumerate **all** potential hexes in a tet mesh exhaustively from vertex neighbourhoods. This is faster
   and complete compared with pattern-matching on tet groups. A selection step (maximum compatible set) then follows.
 - **Fit.** Reuses our tet pipeline directly.
+- **FieldCraft first version.** `fieldcraft-mesh::dominant` uses the paper's face and
+  compatibility criteria on a restricted six-tet fan search. Planar quads preserve the
+  tet mesh's geometry exactly. At a quad–tet interface it merges two tets sharing the
+  same apex into a pyramid, or rejects the hex candidate.
 - **Code.** Implemented in Gmsh (GPL): FORBIDDEN.
 
 **B5.8 Verhetsel, Pellerin, Remacle 2019, hexahedrizations of small quadrangulations.** **Verdict: skip for now (research).**
